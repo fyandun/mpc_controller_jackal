@@ -1,14 +1,3 @@
-#
-# install with:
-#   sudo python3 setup.py build install --force
-#
-# Anaconda (Windows):
-# 1.  conda install m2w64-toolchain
-#     conda install -c anaconda libpython
-#     conda install -c msys2 m2w64-toolchain
-# 2.  echo [build] > %CONDA_PREFIX%\Lib\distutils\distutils.cfg
-#     echo compiler = mingw32 >> %CONDA_PREFIX%\Lib\distutils\distutils.cfg
-# 3. install (see above) will generate d:\Users\...\Miniconda3\envs\py36\Lib\site-packages\acado.cp36-win_amd64.pyd
 
 from catkin_pkg.python_setup import generate_distutils_setup
 from distutils.core import setup

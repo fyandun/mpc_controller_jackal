@@ -3,13 +3,32 @@ import cubic_spline_planner
 import math
 import robot_common.global_defs as defs
 import robot_common.robot_motion as state
+import robot_common.quintic_polynomial_planner as qp
 import scipy.io as sio
+import csv
+import pandas as pd
+
+def get_course_from_file(dl=1.0):
+    #ax = []
+    #ay = []
+    #with open('/home/fyandun/Documentos/simulation/catkin_ws/src/mpc_skid_steer/gps_coordinates/test.txt') as csv_file:
+    #    csv_reader = csv.reader(csv_file, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
+    #    for row in csv_reader:
+    #        ax.append(float(row[0]))
+    #        ay.append(float(row[1]))
+    points = np.loadtxt('/home/fyandun/Documentos/simulation/catkin_ws/src/mpc_skid_steer/gps_coordinates/test.txt', delimiter=',', dtype=float)
+    ax = points[:,0].tolist()
+    ay = points[:,1].tolist()
+    cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
+        ax,ay,ds=dl)
+    return cx, cy, cyaw, ck
 
 def get_vineyard_course(dl=1.0):
     ax = [2.4583730063, 6.7518804365, 10.8136917663, 11.5632410271, 11.9180539295, 11.0372334458, 9.7314,
         8.4255910527, 4.1747550788, 1.33828323, 0.3561238461, 0.2816183203, 1.3911472059, 5.5725694352, 11.3138612183]
     ay = [-0.0001247327, -0.000342074, -0.0005405796, 0.4684504951, 1.4804265236, 2.7482054954, 2.9777, 3.2071415071, 
         2.9856358855, 2.9250751269, 3.4217359359, 4.6814972473, 5.579789281, 5.6680133088, 5.6021789348]
+
     cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
         ax,ay,ds=dl)
 
@@ -171,7 +190,109 @@ def calc_ref_trajectory(state, cx, cy, cyaw, ck, sp, dl, dt, pind):
             xref[3, i] = cyaw[ncourse - 1]
             dref[0, i] = 0.0
 
+    return xref, ind, dref    
+
+def calc_ref_trajectory_v1(state, cx, cy, cyaw, ck, sp, sa, dl, dt, pind):
+    xref = np.zeros((defs.NY, defs.T + 1))
+    dref = np.zeros((1, defs.T + 1))
+    ncourse = len(cx)
+
+    ind, _ = calc_nearest_index(state, cx, cy, cyaw, pind)
+    dist_to_next_gp = np.linalg.norm([cx[ind]-state.x, cy[ind]-state.y])
+    if (dist_to_next_gp > 3):
+        #print("HERE QP")
+        xref = use_quintic_polynomials(state, cx, cy, cyaw, ck, sp, sa, dt, dist_to_next_gp, 0)
+        dref = []
+    else:
+
+        if pind >= ind:
+            ind = pind
+
+        xref[0, 0] = cx[ind]
+        xref[1, 0] = cy[ind]
+        xref[2, 0] = sp[ind]
+        xref[3, 0] = cyaw[ind]
+        dref[0, 0] = 0.0  # steer operational point should be 0
+
+        travel = 0.0
+
+        for i in range(defs.T + 1):
+            travel += abs(state.v) * dt
+            dind = int(round(travel / dl))
+
+            if (ind + dind) < ncourse:
+                xref[0, i] = cx[ind + dind]
+                xref[1, i] = cy[ind + dind]
+                xref[2, i] = sp[ind + dind]
+                xref[3, i] = cyaw[ind + dind]
+                dref[0, i] = 0.0
+            else:
+                xref[0, i] = cx[ncourse - 1]
+                xref[1, i] = cy[ncourse - 1]
+                xref[2, i] = sp[ncourse - 1]
+                xref[3, i] = cyaw[ncourse - 1]
+                dref[0, i] = 0.0
+
     return xref, ind, dref
+
+def use_quintic_polynomials(state, cx, cy, cyaw, ck, sp, sa, dt, dist_to_gp, ind):
+    ga = 0.1 #goal acceleration
+    sx = state.x
+    vxs = state.v*math.cos(state.yaw)
+    axs = sa*math.cos(state.yaw) #start accel in x coords
+    vxg = sp[ind]*math.cos(cyaw[ind])
+    axg = ga*math.cos(cyaw[ind])
+    
+    sy = state.y
+    vys = state.v*math.sin(state.yaw)
+    ays = sa*math.sin(state.yaw) #start accel in y coords
+    vyg = sp[ind]*math.sin(cyaw[ind])
+    ayg = ga*math.sin(cyaw[ind])
+
+    vel_max = 5
+    T = dist_to_gp/vel_max
+
+    xqp = qp.QuinticPolynomial(sx, vxs, axs, cx[ind], vxg, axg, T)
+    yqp = qp.QuinticPolynomial(sy, vys, ays, cy[ind], vyg, ayg, T)
+
+
+    ra, rj = [], []
+    xref = np.zeros((defs.NY, defs.T + 1))
+    t = 0
+    for i in range(defs.T + 1):
+        
+        xref[0, i] = xqp.calc_point(t)
+        xref[1, i] = yqp.calc_point(t)
+
+        vx = xqp.calc_first_derivative(t)
+        vy = yqp.calc_first_derivative(t)
+        xref[2, i] = math.sqrt(vx*vx + vy*vy)
+
+        xref[3,i] = math.atan2(vy, vx)
+
+        ax = xqp.calc_second_derivative(t)
+        ay = yqp.calc_second_derivative(t)
+        a = math.sqrt(ax*ax + ay*ay)
+        if xref[3,i] - xref[3,i-1] < 0:
+            a = -1*a
+        ra.append(a)
+
+        jx = xqp.calc_third_derivative(t)
+        jy = yqp.calc_third_derivative(t)
+        j = math.sqrt(jx*jx + jy*jy)
+        if len(ra) >= 2 and ra[-1] - ra[-2] < 0.0:
+            j *= -1
+
+        rj.append(j)
+
+        t+=dt
+
+    xref[3,:] = smooth_yaw(xref[3,:])
+    if max([abs(i) for i in ra]) >= defs.MAX_ACCEL and max([abs(i) for i in rj]) >= defs.MAX_JERK:
+        print("Warn: Jerk threshold exceeded")
+
+    return xref
+
 
 def check_goal(current_pos, goal, tind, nind):
 

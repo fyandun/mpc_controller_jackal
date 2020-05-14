@@ -176,6 +176,7 @@ def make_twist_msg(accel, omega, dt_in, isGoal):
 
 
 def mpc_node():
+
     rospy.init_node('mpc_jackal', anonymous=True)
 
     odomSubs = rospy.Subscriber("/odometry/filtered", Odometry, callbackFilteredOdom)
@@ -183,6 +184,7 @@ def mpc_node():
     pathPub = rospy.Publisher("/aPath", Path, queue_size=10)
 
     x_ref_all = np.zeros((4, 1), dtype = float) #debugging
+    init_accel = 1
     #generate the paths
     dl =0.1
     #cx, cy, cyaw, ck = utils.get_straight_course(dl)
@@ -190,7 +192,8 @@ def mpc_node():
     #cx, cy, cyaw, ck = utils.get_straight_course3(dl)
     #cx, cy, cyaw, ck = utils.get_forward_course(dl)
     #cx, cy, cyaw, ck = utils.get_switch_back_course(dl)
-    cx, cy, cyaw, ck = utils.get_vineyard_course(dl)
+    #cx, cy, cyaw, ck = utils.get_vineyard_course(dl)
+    cx, cy, cyaw, ck = utils.get_course_from_file(dl)
 
     sp = utils.calc_speed_profile(cx, cy, cyaw, defs.TARGET_SPEED)
     #sio.savemat('speed_profile.mat', {'speed_profile':sp})
@@ -226,8 +229,10 @@ def mpc_node():
 
         robot_state.get_current_meas_state()
 
-        xref, target_ind, dref = utils.calc_ref_trajectory(
-            robot_state, cx, cy, cyaw, ck, sp, dl, dt, target_ind)
+        #xref, target_ind, dref = utils.calc_ref_trajectory(
+        #    robot_state, cx, cy, cyaw, ck, sp, dl, dt, target_ind)
+        xref, target_ind, dref = utils.calc_ref_trajectory_v1(
+            robot_state, cx, cy, cyaw, ck, sp, init_accel, dl, dt, target_ind)
         #x_ref_all = np.append(x_ref_all, xref,axis = 1)
         #sio.savemat('x_ref_all.mat', {'x_ref_all':x_ref_all})
 
@@ -247,8 +252,9 @@ def mpc_node():
                     ai = -0.1
                 else:
                     #print(robot_state.v)
-                    ai = 10
+                    ai = init_accel
         
+        init_accel = oa[0]
         #apply the control signals
         dt_cmd = rospy.Time.now().to_sec() - current_time.to_sec()
         isGoal = utils.check_goal(robot_state.get_current_pos_meas(), goal, target_ind, len(cx))
