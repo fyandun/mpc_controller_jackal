@@ -249,7 +249,7 @@ def use_quintic_polynomials(state, cx, cy, cyaw, ck, sp, sa, dt, dist_to_gp, ind
     vyg = sp[ind]*math.sin(cyaw[ind])
     ayg = ga*math.sin(cyaw[ind])
 
-    vel_max = 5
+    vel_max = 0.4 #5
     T = dist_to_gp/vel_max
 
     xqp = qp.QuinticPolynomial(sx, vxs, axs, cx[ind], vxg, axg, T)
@@ -303,16 +303,18 @@ def check_goal(current_pos, goal, tind, nind):
 
     isgoal = (d <= defs.GOAL_DIS)
 
-    if abs(tind - nind) >= 5:
+    if abs(tind - nind) >= 50: #50
         isgoal = False
 
     # isstop = (abs(state.v) <= defs.STOP_SPEED)
     # if isgoal and isstop:
     #     return True
     if isgoal:
-        return True
+        #return True
+        return [1, d]
 
-    return False    
+    #return False
+    return[0, 0]    
 
 def smooth_yaw(yaw):
 

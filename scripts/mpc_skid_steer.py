@@ -24,6 +24,8 @@ robot_state = bot_model.kinematics(0, 0, 0, 0)
 last_time = rospy.Time()
 dt = 0.1
 yaw_prev_ = 0
+vel_up = 0
+vel_down = defs.TARGET_SPEED
 
 local_path_pub = rospy.Publisher("/localPath", Marker, queue_size=10)
 mark = Marker()
@@ -159,13 +161,30 @@ def callbackFilteredOdom(odom_msg):
     #         last_time = current_time         
 
 #here I need to create the msg to send - chech in case of a carlike
-def make_twist_msg(accel, omega, dt_in, isGoal):
+def make_twist_msg(accel, omega, dt_in, goalData, vel_meas):
+    global vel_up
+    global vel_down
     cmd = Twist()
-    if not isGoal:
-        cmd.linear.x = 0.5 + accel*dt_in
+    if not goalData[0]:
+        cmd_vel_ = vel_up + dt_in*defs.TARGET_SPEED/defs.T_RAMP_UP
+        vel_up = cmd_vel_
+        #print(vel_up)
+        if cmd_vel_ < defs.TARGET_SPEED:
+            cmd.linear.x = cmd_vel_
+        else:    
+            cmd.linear.x = defs.TARGET_SPEED
         cmd.angular.z = omega
     else:
-        cmd.linear.x = 0
+        dToGoal = goalData[1]
+        cmd_vel_ = vel_down - dt_in*vel_down/defs.T_RAMP_DOWN
+        #cmd_vel_ = vel_down - dt_in*defs.TARGET_SPEED*defs.TARGET_SPEED/dToGoal
+        print(dToGoal)
+        if dToGoal < 0.1:
+            cmd.linear.x = 0
+        else:
+            cmd.linear.x = cmd_vel_
+            vel_down = cmd_vel_
+
         cmd.angular.z = 0
     cmd.linear.y = 0
     cmd.linear.z = 0
@@ -257,9 +276,9 @@ def mpc_node():
         init_accel = oa[0]
         #apply the control signals
         dt_cmd = rospy.Time.now().to_sec() - current_time.to_sec()
-        isGoal = utils.check_goal(robot_state.get_current_pos_meas(), goal, target_ind, len(cx))
-        #print(dt_cmd)
-        cmd_command = make_twist_msg(ai, wi, dt_cmd, isGoal)
+        goalData = utils.check_goal(robot_state.get_current_pos_meas(), goal, target_ind, len(cx))
+        #print(len(cx))
+        cmd_command = make_twist_msg(ai, wi, dt_cmd, goalData, robot_state.v)
         controlPub.publish(cmd_command)
 
         
