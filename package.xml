@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>mpc_skid_steer</name>
+  <name>mpc_warthog</name>
   <version>1.0.0</version>
   <description>MPC controller for a skid steer robot</description>
 

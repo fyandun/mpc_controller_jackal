@@ -1,4 +1,4 @@
-cd ~/Documentos/simulation/catkin_ws/src/mpc_skid_steer/src/acado_diff/
+cd ~/Documentos/simulation/catkin_ws/src/mpc_controller_warthog/src/acado_diff/
 
 mkdir build_python2
 python setup.py build --build-base=build_python2/

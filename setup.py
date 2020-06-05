@@ -8,13 +8,13 @@ requirements = [
     'scikit-learn',
 ]
 
-setup_args = generate_distutils_setup(name='mpc_skid_steer',
+setup_args = generate_distutils_setup(name='mpc_warthog',
       version='1.0.0',
       description='MPC controller for a skid steer robot',
       author='',
       author_email='',
       package_dir = {'': '.'},
-      packages=['robot_common'],
+      packages=['common'],
       install_requires = requirements,
      )
 
